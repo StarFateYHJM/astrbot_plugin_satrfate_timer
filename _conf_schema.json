@@ -29,11 +29,6 @@
     "description": "系统提示词",
     "default": ""
   },
-  "use_network_time": {
-    "type": "bool",
-    "description": "网络时间校准",
-    "default": true
-  },
   "tasks": {
     "type": "template_list",
     "description": "定时任务",
