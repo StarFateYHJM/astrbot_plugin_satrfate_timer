@@ -8,7 +8,7 @@ class _MessageWrapper:
     def __init__(self, chain):
         self.chain = chain
 
-@register("satrfate_timer", "Satrfate", "极简定时问候插件", "1.2.0")
+@register("satrfate_timer", "Satrfate", "极简定时问候插件", "1.2.1")
 class TimerPlugin(Star):
     def __init__(self, context: Context, config: dict = None):
         super().__init__(context)
@@ -19,13 +19,14 @@ class TimerPlugin(Star):
         self.api_base = self.config.get("api_base", "https://api.deepseek.com/v1")
         self.api_key = self.config.get("api_key", "")
         self.model = self.config.get("model", "deepseek-v4-flash")
-        self.persona_name = self.config.get("persona", "")
+        self.system_prompt = self.config.get("system_prompt", "")
         self._sent_today = {}
+        self._last_sent = {}  # 记录每个任务上次发送时间戳，防止重复触发
 
         logger.info(f"[Timer] 插件已加载，读取到 {len(self.tasks)} 个定时任务")
         logger.info(f"[Timer] LLM模式: {'开启' if self.use_llm else '关闭'}")
         if self.use_llm:
-            logger.info(f"[Timer] API: {self.api_base}, Model: {self.model}, Persona: {self.persona_name or '默认'}")
+            logger.info(f"[Timer] API: {self.api_base}, Model: {self.model}")
         for i, task in enumerate(self.tasks):
             logger.info(f"[Timer] 任务{i+1}: time={task.get('time')}, umo={task.get('umo')}, prompt={task.get('prompt', '')[:30]}...")
 
@@ -55,10 +56,14 @@ class TimerPlugin(Star):
                 task_time = task.get("time", "")
                 if cache_now == task_time:
                     task_key = f"{i}-{today}"
-                    if task_key not in self._sent_today:
-                        self._sent_today[task_key] = True
-                        logger.info(f"[Timer] 触发定时任务: {task_time}")
-                        await self._execute_task(task)
+                    now_ts = time.time()
+                    # 60秒冷却：同一任务在60秒内不重复发送
+                    if task_key in self._sent_today or (task_key in self._last_sent and now_ts - self._last_sent[task_key] < 60):
+                        continue
+                    self._sent_today[task_key] = True
+                    self._last_sent[task_key] = now_ts
+                    logger.info(f"[Timer] 触发定时任务: {task_time}")
+                    await self._execute_task(task)
 
             await asyncio.sleep(1)
 
@@ -106,15 +111,7 @@ class TimerPlugin(Star):
                 logger.error("[Timer] 缺少 api_key")
                 return ""
 
-            # 获取人格设定
-            system_prompt = ""
-            if self.persona_name:
-                persona_content = await self._get_persona_content(self.persona_name)
-                if persona_content:
-                    system_prompt = persona_content
-
-            if not system_prompt:
-                system_prompt = "请用中文回复，语气自然亲切。"
+            system_prompt = self.system_prompt if self.system_prompt else "请用中文回复，语气自然亲切。"
 
             headers = {
                 "Authorization": f"Bearer {self.api_key}",
@@ -145,19 +142,6 @@ class TimerPlugin(Star):
                         return ""
         except Exception as e:
             logger.error(f"[Timer] LLM生成失败: {e}")
-            return ""
-
-    async def _get_persona_content(self, persona_name: str) -> str:
-        try:
-            persona_mgr = self.context.persona_manager
-            if not persona_mgr:
-                return ""
-            persona = persona_mgr.get_persona(persona_name)
-            if persona and hasattr(persona, 'system_prompt'):
-                return persona.system_prompt
-            return ""
-        except Exception as e:
-            logger.error(f"[Timer] 获取人格设定失败: {e}")
             return ""
 
     async def terminate(self):
