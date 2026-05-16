@@ -1,10 +1,9 @@
 import asyncio
 import time
 from astrbot.api.star import Context, Star, register
-from astrbot.api.message_components import Plain
 from astrbot.api import logger
 
-@register("satrfate_timer", "Satrfate", "极简定时问候插件", "1.3.0")
+@register("satrfate_timer", "Satrfate", "极简定时问候插件", "1.3.1")
 class TimerPlugin(Star):
     def __init__(self, context: Context, config: dict = None):
         super().__init__(context)
@@ -16,11 +15,8 @@ class TimerPlugin(Star):
         self.api_key = self.config.get("api_key", "")
         self.model = self.config.get("model", "deepseek-v4-flash")
         self.system_prompt = self.config.get("system_prompt", "")
-        
-        # 网络时间校准相关
         self.use_network_time = self.config.get("use_network_time", True)
         self.timezone = self.config.get("timezone", "Asia/Shanghai")
-        
         self._sent_today = set()
 
         # 启动信息始终输出
@@ -34,7 +30,6 @@ class TimerPlugin(Star):
 
         asyncio.create_task(self._loop())
 
-    # ========== 统一日志方法 ==========
     def _log(self, msg: str, level: str = "info"):
         if self.debug or level != "debug":
             getattr(logger, level)(f"[Timer] {msg}")
@@ -45,7 +40,6 @@ class TimerPlugin(Star):
         cache_now = time.strftime("%H:%M")
 
         while True:
-            # 网络时间校准逻辑，失败时自动降级
             if self.use_network_time and time.time() - last_sync > 30:
                 net_time = await self._get_network_time()
                 if net_time:
@@ -104,11 +98,34 @@ class TimerPlugin(Star):
         else:
             final_text = raw_prompt
 
+        # 使用平台适配器直接发送消息，这是最可靠的方式
         try:
-            # 【核心修复】参考欢迎插件，使用 yield event.chain_result 发送纯文本
-            async def _send():
-                yield Plain(final_text)
-            await self.context.send_message(umo, _send())
+            adapter = self.context.get_platform_adapter("aiocqhttp")
+            if adapter is None:
+                self._log("未找到 aiocqhttp 适配器", "error")
+                return
+
+            parts = umo.split(":")
+            if len(parts) < 3:
+                self._log("UMO 格式错误", "error")
+                return
+            msg_type = parts[1]
+            session_id = parts[2]
+
+            if msg_type == "FriendMessage":
+                await adapter.send_private_message(int(session_id), final_text)
+            elif msg_type == "GroupMessage":
+                ids = session_id.split("_")
+                if len(ids) >= 2:
+                    group_id = int(ids[1])
+                    await adapter.send_group_message(group_id, final_text)
+                else:
+                    self._log("群聊 UMO 格式错误", "error")
+                    return
+            else:
+                self._log(f"不支持的消息类型: {msg_type}", "error")
+                return
+
             self._log(f"消息发送成功: {final_text[:50]}...", "info")
         except Exception as e:
             self._log(f"发送消息失败: {e}", "error")
