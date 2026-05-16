@@ -1,4 +1,9 @@
 {
+  "debug": {
+    "type": "bool",
+    "description": "开启调试日志",
+    "default": false
+  },
   "use_network_time": {
     "type": "bool",
     "description": "是否使用网络时间校准（开启后会定期从 timeapi.io 获取北京时间）",
