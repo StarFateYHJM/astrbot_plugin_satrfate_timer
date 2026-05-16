@@ -2,19 +2,19 @@
   "tasks": {
     "type": "list",
     "default": [],
-    "description": "定时任务列表",
+    "description": "定时任务列表，点击添加按钮创建新任务",
     "items": {
       "type": "object",
       "properties": {
         "time": {
           "type": "string",
           "default": "08:00",
-          "description": "触发时间（HH:MM格式）"
+          "description": "触发时间（HH:MM格式，24小时制）"
         },
         "umo": {
           "type": "string",
           "default": "",
-          "description": "目标会话UMO"
+          "description": "目标会话UMO（如 FriendMessage:QQ号 或 GroupMessage:群号）"
         },
         "prompt": {
           "type": "string",
