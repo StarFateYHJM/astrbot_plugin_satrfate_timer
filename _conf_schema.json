@@ -9,6 +9,21 @@
     "description": "开启LLM模式：让AI根据提示词自动生成问候语；关闭则发送固定文本",
     "default": false
   },
+  "api_base": {
+    "type": "string",
+    "description": "LLM API 地址（如 https://api.deepseek.com/v1）",
+    "default": "https://api.deepseek.com/v1"
+  },
+  "api_key": {
+    "type": "string",
+    "description": "LLM API 密钥",
+    "default": ""
+  },
+  "model": {
+    "type": "string",
+    "description": "模型名称（如 deepseek-chat, gpt-4o-mini）",
+    "default": "deepseek-chat"
+  },
   "tasks": {
     "type": "template_list",
     "description": "定时任务列表，点击添加按钮创建新任务",
