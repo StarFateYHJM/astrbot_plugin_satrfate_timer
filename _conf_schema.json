@@ -6,17 +6,17 @@
   },
   "use_llm": {
     "type": "bool",
-    "description": "开启LLM模式",
+    "description": "开启LLM生成",
     "default": false
   },
   "api_base": {
     "type": "string",
-    "description": "LLM API 地址",
+    "description": "LLM API地址",
     "default": "https://api.deepseek.com/v1"
   },
   "api_key": {
     "type": "string",
-    "description": "LLM API 密钥",
+    "description": "LLM API密钥",
     "default": ""
   },
   "model": {
@@ -26,41 +26,24 @@
   },
   "system_prompt": {
     "type": "text",
-    "description": "LLM 系统提示词（人格设定）",
+    "description": "系统提示词",
     "default": ""
   },
   "use_network_time": {
     "type": "bool",
-    "description": "是否使用网络时间校准",
+    "description": "网络时间校准",
     "default": true
-  },
-  "timezone": {
-    "type": "string",
-    "description": "时区（如 Asia/Shanghai）",
-    "default": "Asia/Shanghai"
   },
   "tasks": {
     "type": "template_list",
-    "description": "定时任务列表",
+    "description": "定时任务",
     "templates": {
       "default": {
         "name": "新任务",
         "items": {
-          "time": {
-            "type": "string",
-            "description": "触发时间（HH:MM格式）",
-            "default": "08:00"
-          },
-          "umo": {
-            "type": "string",
-            "description": "目标会话UMO",
-            "default": ""
-          },
-          "prompt": {
-            "type": "text",
-            "description": "发送内容或LLM提示词",
-            "default": ""
-          }
+          "time": {"type": "string", "description": "触发时间(HH:MM)", "default": "08:00"},
+          "umo": {"type": "string", "description": "目标UMO", "default": ""},
+          "prompt": {"type": "text", "description": "内容/提示词", "default": ""}
         }
       }
     },
