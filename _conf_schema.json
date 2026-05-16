@@ -1,9 +1,4 @@
 {
-  "debug": {
-    "type": "bool",
-    "description": "开启调试日志",
-    "default": false
-  },
   "use_llm": {
     "type": "bool",
     "description": "开启LLM生成",
