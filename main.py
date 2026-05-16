@@ -3,12 +3,13 @@ import time
 from astrbot.api.star import Context, Star, register
 from astrbot.api import logger
 from astrbot.api.message_components import Plain
+from astrbot.api.provider import ProviderRequest
 
 class _MessageWrapper:
     def __init__(self, chain):
         self.chain = chain
 
-@register("satrfate_timer", "Satrfate", "极简定时问候插件", "1.1.2")
+@register("satrfate_timer", "Satrfate", "极简定时问候插件", "1.1.3")
 class TimerPlugin(Star):
     def __init__(self, context: Context, config: dict = None):
         super().__init__(context)
@@ -94,12 +95,8 @@ class TimerPlugin(Star):
 
     async def _generate_text(self, prompt: str) -> str:
         try:
-            provider = self.context.get_default_provider()
-            if not provider:
-                logger.error("[Timer] 没有可用的 LLM 提供者")
-                return ""
-
-            resp = await provider.text_request(
+            resp = await ProviderRequest.text_request(
+                context=self.context,
                 prompt=prompt,
                 system_prompt="",
                 contexts=[],
