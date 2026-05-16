@@ -3,14 +3,12 @@ import time
 from astrbot.api.star import Context, Star, register
 from astrbot.api import logger
 from astrbot.api.message_components import Plain
-from astrbot.api.provider import ProviderRequest
 
-# 解决 send_message 兼容性问题：构建一个具有 .chain 属性的简单包装器
 class _MessageWrapper:
     def __init__(self, chain):
         self.chain = chain
 
-@register("satrfate_timer", "Satrfate", "极简定时问候插件", "1.1.1")
+@register("satrfate_timer", "Satrfate", "极简定时问候插件", "1.1.2")
 class TimerPlugin(Star):
     def __init__(self, context: Context, config: dict = None):
         super().__init__(context)
@@ -28,7 +26,6 @@ class TimerPlugin(Star):
         asyncio.create_task(self._loop())
 
     async def _loop(self):
-        """每隔30秒校准一次网络北京时间，每秒检查任务"""
         logger.info("[Timer] 定时任务循环已启动")
         last_sync = 0
         cache_now = time.strftime("%H:%M")
@@ -60,7 +57,6 @@ class TimerPlugin(Star):
             await asyncio.sleep(1)
 
     async def _get_network_time(self):
-        """从网络API获取北京时间"""
         try:
             import aiohttp
             async with aiohttp.ClientSession() as session:
@@ -73,7 +69,6 @@ class TimerPlugin(Star):
         return None
 
     async def _execute_task(self, task: dict):
-        """执行任务：根据配置使用LLM或固定内容，然后发送消息"""
         umo = task.get("umo", "")
         raw_prompt = task.get("prompt", "你好~")
 
@@ -81,7 +76,6 @@ class TimerPlugin(Star):
             logger.error("[Timer] 任务缺少 UMO，已跳过")
             return
 
-        # 决定最终发送的文本
         if self.use_llm:
             final_text = await self._generate_text(raw_prompt)
             if not final_text:
@@ -90,7 +84,6 @@ class TimerPlugin(Star):
         else:
             final_text = raw_prompt
 
-        # 发送消息
         try:
             msg_chain = [Plain(final_text)]
             wrapper = _MessageWrapper(msg_chain)
@@ -100,29 +93,18 @@ class TimerPlugin(Star):
             logger.error(f"[Timer] 发送消息失败: {e}")
 
     async def _generate_text(self, prompt: str) -> str:
-        """调用 LLM 生成文本，并返回纯文本内容"""
         try:
-            provider = self.context.get_llm_provider()
+            provider = self.context.get_default_provider()
             if not provider:
                 logger.error("[Timer] 没有可用的 LLM 提供者")
                 return ""
 
-            req = ProviderRequest(
+            resp = await provider.text_request(
                 prompt=prompt,
-                system_prompt="",  # 使用全局人格设定
+                system_prompt="",
                 contexts=[],
             )
-            resp = await provider.request(req)
-            if resp and resp.chain:
-                # 提取纯文本
-                texts = []
-                for comp in resp.chain:
-                    if hasattr(comp, 'text'):
-                        texts.append(comp.text)
-                    elif isinstance(comp, Plain):
-                        texts.append(comp.text)
-                return "".join(texts).strip()
-            return ""
+            return resp.strip() if resp else ""
         except Exception as e:
             logger.error(f"[Timer] LLM生成失败: {e}")
             return ""
