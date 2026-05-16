@@ -2,18 +2,26 @@ import asyncio
 import time
 from astrbot.api.star import Context, Star, register
 from astrbot.api import logger
-from astrbot.api.message_components import Plain, MessageChain
+from astrbot.api.message_components import Plain
+from astrbot.api.provider import ProviderRequest
 
-@register("satrfate_timer", "Satrfate", "极简定时问候插件", "1.0.6")
+# 解决 send_message 兼容性问题：构建一个具有 .chain 属性的简单包装器
+class _MessageWrapper:
+    def __init__(self, chain):
+        self.chain = chain
+
+@register("satrfate_timer", "Satrfate", "极简定时问候插件", "1.1.1")
 class TimerPlugin(Star):
     def __init__(self, context: Context, config: dict = None):
         super().__init__(context)
         self.config = config or {}
         self.tasks = self.config.get("tasks", [])
         self.use_network_time = self.config.get("use_network_time", True)
+        self.use_llm = self.config.get("use_llm", False)
         self._sent_today = {}
 
         logger.info(f"[Timer] 插件已加载，读取到 {len(self.tasks)} 个定时任务")
+        logger.info(f"[Timer] LLM模式: {'开启' if self.use_llm else '关闭'}")
         for i, task in enumerate(self.tasks):
             logger.info(f"[Timer] 任务{i+1}: time={task.get('time')}, umo={task.get('umo')}, prompt={task.get('prompt', '')[:30]}...")
 
@@ -65,22 +73,59 @@ class TimerPlugin(Star):
         return None
 
     async def _execute_task(self, task: dict):
-        """执行任务：发送消息到目标会话"""
-        try:
-            umo = task.get("umo", "")
-            prompt = task.get("prompt", "你好~")
+        """执行任务：根据配置使用LLM或固定内容，然后发送消息"""
+        umo = task.get("umo", "")
+        raw_prompt = task.get("prompt", "你好~")
 
-            if not umo:
-                logger.error("[Timer] 任务缺少 UMO，已跳过")
+        if not umo:
+            logger.error("[Timer] 任务缺少 UMO，已跳过")
+            return
+
+        # 决定最终发送的文本
+        if self.use_llm:
+            final_text = await self._generate_text(raw_prompt)
+            if not final_text:
+                logger.error("[Timer] LLM生成失败，跳过此任务")
                 return
+        else:
+            final_text = raw_prompt
 
-            chain = MessageChain([Plain(prompt)])
-
-            logger.info(f"[Timer] 正在发送消息到 {umo}: {prompt[:50]}...")
-            await self.context.send_message(umo, chain)
-            logger.info(f"[Timer] 消息发送成功")
+        # 发送消息
+        try:
+            msg_chain = [Plain(final_text)]
+            wrapper = _MessageWrapper(msg_chain)
+            await self.context.send_message(umo, wrapper)
+            logger.info(f"[Timer] 消息发送成功: {final_text[:50]}...")
         except Exception as e:
             logger.error(f"[Timer] 发送消息失败: {e}")
+
+    async def _generate_text(self, prompt: str) -> str:
+        """调用 LLM 生成文本，并返回纯文本内容"""
+        try:
+            provider = self.context.get_llm_provider()
+            if not provider:
+                logger.error("[Timer] 没有可用的 LLM 提供者")
+                return ""
+
+            req = ProviderRequest(
+                prompt=prompt,
+                system_prompt="",  # 使用全局人格设定
+                contexts=[],
+            )
+            resp = await provider.request(req)
+            if resp and resp.chain:
+                # 提取纯文本
+                texts = []
+                for comp in resp.chain:
+                    if hasattr(comp, 'text'):
+                        texts.append(comp.text)
+                    elif isinstance(comp, Plain):
+                        texts.append(comp.text)
+                return "".join(texts).strip()
+            return ""
+        except Exception as e:
+            logger.error(f"[Timer] LLM生成失败: {e}")
+            return ""
 
     async def terminate(self):
         logger.info("[Timer] 插件已卸载")
