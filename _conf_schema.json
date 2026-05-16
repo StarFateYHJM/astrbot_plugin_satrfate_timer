@@ -1,0 +1,7 @@
+{
+  "tasks": {
+    "type": "list",
+    "default": [],
+    "description": "定时任务列表。每项包含：time（HH:MM格式）、prompt（发送内容）、target（目标会话UMO，格式：Bot名称:FriendMessage:QQ号 或 Bot名称:GroupMessage:QQ号_群号）"
+  }
+}
