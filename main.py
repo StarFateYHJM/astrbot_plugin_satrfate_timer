@@ -5,13 +5,13 @@ from astrbot.api.event import filter, AstrMessageEvent
 from astrbot.api.star import Context, Star, register
 from astrbot.api import logger
 
-@register("satrfate_timer", "YHJM", "极简定时问候插件", "1.0.0")
+@register("satrfate_timer", "Satrfate", "极简定时问候插件", "1.0.3")
 class TimerPlugin(Star):
     def __init__(self, context: Context, config: dict = None):
         super().__init__(context)
         self.config = config or {}
         self.tasks = self.config.get("tasks", [])
-        self._sent_today = set()
+        self._sent_today = {}
         self._one_time_tasks = []
         asyncio.create_task(self._loop())
 
@@ -23,12 +23,14 @@ class TimerPlugin(Star):
             current_ts = time.time()
 
             # 处理日常定时任务
-            for task in self.tasks:
-                task_key = f"{today}-{task['time']}"
-                if now == task["time"] and task_key not in self._sent_today:
-                    self._sent_today.add(task_key)
-                    await self._execute_task(task)
-                    logger.info(f"[Timer] 已发送 {task['time']} 的定时消息")
+            for i, task in enumerate(self.tasks):
+                task_time = task.get("time", "")
+                if now == task_time:
+                    task_key = f"{i}-{today}"
+                    if task_key not in self._sent_today:
+                        self._sent_today[task_key] = True
+                        await self._execute_task(task)
+                        logger.info(f"[Timer] 已发送 {task_time} 的定时消息")
 
             # 处理一次性测试任务
             for task in self._one_time_tasks[:]:
@@ -42,14 +44,14 @@ class TimerPlugin(Star):
     async def _execute_task(self, task: dict):
         """执行任务：发送消息到目标会话"""
         try:
-            target = task.get("target", "")
-            prompt = task.get("prompt", "你好呀~")
+            umo = task.get("umo", "")
+            prompt = task.get("prompt", "你好~")
 
-            if not target:
-                logger.error("[Timer] 任务缺少 target，已跳过")
+            if not umo:
+                logger.error("[Timer] 任务缺少 UMO，已跳过")
                 return
 
-            await self.context.send_message(target, prompt)
+            await self.context.send_message(umo, prompt)
         except Exception as e:
             logger.error(f"[Timer] 发送消息失败: {e}")
 
@@ -62,27 +64,21 @@ class TimerPlugin(Star):
         """
         match = re.match(r"(.+?)\s+(\d+)$", message.strip())
         if not match:
-            yield event.plain_result("格式错误，正确用法：/test <内容> <秒数>\n例如：/test 鸽鸽鸽 5")
+            yield event.plain_result("❌ 格式错误，正确用法：/test <内容> <秒数>\n例如：/test 鸽鸽鸽 5")
             return
 
         content = match.group(1).strip()
         seconds = int(match.group(2))
 
         if seconds <= 0 or seconds > 300:
-            yield event.plain_result("秒数需在 1-300 之间")
+            yield event.plain_result("❌ 秒数需在 1-300 之间")
             return
 
-        # 获取发送目标
-        uid = event.get_sender_id()
-        bot_id = event.get_self_id()
-        if event.is_private_chat():
-            target = f"Bot:{event.get_self_id()}:FriendMessage:{uid}"
-        else:
-            target = f"Bot:{event.get_self_id()}:GroupMessage:{uid}_{event.get_group_id()}"
+        # 使用当前会话的 UMO
+        umo = event.unified_msg_origin
 
-        # 创建一次性任务
         task = {
-            "target": target,
+            "umo": umo,
             "prompt": content,
             "trigger_ts": time.time() + seconds
         }
