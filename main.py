@@ -1,18 +1,20 @@
 import asyncio
 import time
 from astrbot.api.star import Context, Star, register
-from astrbot.api import logger
 from astrbot.api.message_components import Plain
+from astrbot.api import logger as astr_logger
 
 class _MessageWrapper:
+    """包装消息链，兼容 send_message 要求 .chain 属性的对象"""
     def __init__(self, chain):
         self.chain = chain
 
-@register("satrfate_timer", "Satrfate", "极简定时问候插件", "1.2.1")
+@register("satrfate_timer", "Satrfate", "极简定时问候插件", "1.2.2")
 class TimerPlugin(Star):
     def __init__(self, context: Context, config: dict = None):
         super().__init__(context)
         self.config = config or {}
+        self.debug = self.config.get("debug", False)
         self.tasks = self.config.get("tasks", [])
         self.use_network_time = self.config.get("use_network_time", True)
         self.use_llm = self.config.get("use_llm", False)
@@ -21,23 +23,31 @@ class TimerPlugin(Star):
         self.model = self.config.get("model", "deepseek-v4-flash")
         self.system_prompt = self.config.get("system_prompt", "")
         self._sent_today = {}
-        self._last_sent = {}  # 记录每个任务上次发送时间戳，防止重复触发
+        self._last_sent = {}
 
-        logger.info(f"[Timer] 插件已加载，读取到 {len(self.tasks)} 个定时任务")
-        logger.info(f"[Timer] LLM模式: {'开启' if self.use_llm else '关闭'}")
+        self._log(f"插件已加载，读取到 {len(self.tasks)} 个定时任务")
+        self._log(f"LLM模式: {'开启' if self.use_llm else '关闭'}")
         if self.use_llm:
-            logger.info(f"[Timer] API: {self.api_base}, Model: {self.model}")
+            self._log(f"API: {self.api_base}, Model: {self.model}")
         for i, task in enumerate(self.tasks):
-            logger.info(f"[Timer] 任务{i+1}: time={task.get('time')}, umo={task.get('umo')}, prompt={task.get('prompt', '')[:30]}...")
+            self._log(f"任务{i+1}: time={task.get('time')}, umo={task.get('umo')}, prompt={task.get('prompt', '')[:30]}...")
 
         asyncio.create_task(self._loop())
 
+    def _log(self, msg: str, level: str = "info"):
+        """根据 debug 开关输出日志"""
+        if self.debug or level != "debug":
+            getattr(astr_logger, level)(f"[Timer] {msg}")
+        elif level == "debug" and not self.debug:
+            pass
+
     async def _loop(self):
-        logger.info("[Timer] 定时任务循环已启动")
+        self._log("定时任务循环已启动")
         last_sync = 0
         cache_now = time.strftime("%H:%M")
 
         while True:
+            # 网络时间校准
             if self.use_network_time and time.time() - last_sync > 30:
                 net_time = await self._get_network_time()
                 if net_time:
@@ -45,24 +55,24 @@ class TimerPlugin(Star):
                     last_sync = time.time()
                 else:
                     cache_now = time.strftime("%H:%M")
-                    logger.warning("[Timer] 网络时间获取失败，降级使用系统时间")
-
+                    self._log("网络时间获取失败，降级使用系统时间", "warning")
             if not self.use_network_time:
                 cache_now = time.strftime("%H:%M")
 
             today = time.strftime("%Y-%m-%d")
 
+            # 检查每个任务
             for i, task in enumerate(self.tasks):
                 task_time = task.get("time", "")
                 if cache_now == task_time:
-                    task_key = f"{i}-{today}"
+                    task_key = f"{task.get('time')}-{task.get('umo')}-{today}"
                     now_ts = time.time()
-                    # 60秒冷却：同一任务在60秒内不重复发送
+                    # 60秒冷却 + 当天不重复
                     if task_key in self._sent_today or (task_key in self._last_sent and now_ts - self._last_sent[task_key] < 60):
                         continue
                     self._sent_today[task_key] = True
                     self._last_sent[task_key] = now_ts
-                    logger.info(f"[Timer] 触发定时任务: {task_time}")
+                    self._log(f"触发定时任务: {task_time}", "info")
                     await self._execute_task(task)
 
             await asyncio.sleep(1)
@@ -76,47 +86,40 @@ class TimerPlugin(Star):
                         data = await resp.json()
                         return f"{int(data['hour']):02d}:{int(data['minute']):02d}"
         except Exception as e:
-            logger.error(f"[Timer] 获取网络时间失败: {e}")
+            self._log(f"获取网络时间失败: {e}", "error")
         return None
 
     async def _execute_task(self, task: dict):
         umo = task.get("umo", "")
         raw_prompt = task.get("prompt", "你好~")
-
         if not umo:
-            logger.error("[Timer] 任务缺少 UMO，已跳过")
+            self._log("任务缺少 UMO，已跳过", "error")
             return
 
         if self.use_llm:
             final_text = await self._generate_text(raw_prompt)
             if not final_text:
-                logger.error("[Timer] LLM生成失败，跳过此任务")
+                self._log("LLM生成失败，跳过此任务", "error")
                 return
         else:
             final_text = raw_prompt
 
         try:
-            msg_chain = [Plain(final_text)]
-            wrapper = _MessageWrapper(msg_chain)
+            wrapper = _MessageWrapper([Plain(final_text)])
             await self.context.send_message(umo, wrapper)
-            logger.info(f"[Timer] 消息发送成功: {final_text[:50]}...")
+            self._log(f"消息发送成功: {final_text[:50]}...")
         except Exception as e:
-            logger.error(f"[Timer] 发送消息失败: {e}")
+            self._log(f"发送消息失败: {e}", "error")
 
     async def _generate_text(self, prompt: str) -> str:
         try:
             import aiohttp
-
             if not self.api_key:
-                logger.error("[Timer] 缺少 api_key")
+                self._log("缺少 api_key", "error")
                 return ""
 
             system_prompt = self.system_prompt if self.system_prompt else "请用中文回复，语气自然亲切。"
-
-            headers = {
-                "Authorization": f"Bearer {self.api_key}",
-                "Content-Type": "application/json"
-            }
+            headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
             payload = {
                 "model": self.model,
                 "messages": [
@@ -126,7 +129,6 @@ class TimerPlugin(Star):
                 "max_tokens": 500,
                 "temperature": 0.8
             }
-
             async with aiohttp.ClientSession() as session:
                 async with session.post(
                     f"{self.api_base}/chat/completions",
@@ -138,11 +140,11 @@ class TimerPlugin(Star):
                         data = await resp.json()
                         return data["choices"][0]["message"]["content"].strip()
                     else:
-                        logger.error(f"[Timer] API请求失败: {resp.status}")
+                        self._log(f"API请求失败: {resp.status}", "error")
                         return ""
         except Exception as e:
-            logger.error(f"[Timer] LLM生成失败: {e}")
+            self._log(f"LLM生成失败: {e}", "error")
             return ""
 
     async def terminate(self):
-        logger.info("[Timer] 插件已卸载")
+        self._log("插件已卸载")
