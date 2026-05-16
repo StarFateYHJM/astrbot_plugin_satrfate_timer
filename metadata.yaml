@@ -1,0 +1,6 @@
+name: astrbot_plugin_satrfate_timer
+plugin_type: plugin
+version: 1.0.0
+description: 极简定时问候插件，支持多任务配置和一次性测试指令
+author: Satrfate
+dependencies: []
