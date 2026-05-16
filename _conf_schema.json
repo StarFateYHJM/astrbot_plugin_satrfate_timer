@@ -1,4 +1,9 @@
 {
+  "use_network_time": {
+    "type": "bool",
+    "description": "是否使用网络时间校准（开启后会定期从 timeapi.io 获取北京时间）",
+    "default": true
+  },
   "tasks": {
     "type": "template_list",
     "description": "定时任务列表，点击添加按钮创建新任务",
@@ -8,7 +13,7 @@
         "items": {
           "time": {
             "type": "string",
-            "description": "触发时间（HH:MM格式）",
+            "description": "触发时间（HH:MM格式，北京时间）",
             "default": "08:00"
           },
           "umo": {
