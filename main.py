@@ -9,7 +9,7 @@ class _MessageWrapper:
     def __init__(self, chain):
         self.chain = chain
 
-@register("satrfate_timer", "YHJM", "极简定时问候插件", "1.7.1")
+@register("satrfate_timer", "YHJM", "极简定时问候插件", "1.7.2")
 class TimerPlugin(Star):
     def __init__(self, context: Context, config: dict = None):
         super().__init__(context)
@@ -21,6 +21,7 @@ class TimerPlugin(Star):
         self.model = self.config.get("model", "deepseek-v4-flash")
         self.system_prompt = self.config.get("system_prompt", "")
         self._sent_today = set()
+        self._lock = asyncio.Lock()
 
         logger.info(f"[Timer] 已加载 {len(self.tasks)} 个任务")
         for i, t in enumerate(self.tasks):
@@ -33,17 +34,23 @@ class TimerPlugin(Star):
             now = time.strftime("%H:%M")
             today = time.strftime("%Y-%m-%d")
 
-            for i, task in enumerate(self.tasks):
-                if now != task.get("time", ""):
-                    continue
+            async with self._lock:
+                for i, task in enumerate(self.tasks):
+                    if now != task.get("time", ""):
+                        continue
 
-                key = f"{i}-{today}"
-                if key in self._sent_today:
-                    continue
+                    key = f"{i}-{today}"
+                    if key in self._sent_today:
+                        continue
 
-                self._sent_today.add(key)
-                logger.info(f"[Timer] 触发 {task.get('time')}")
-                await self._execute_task(task)
+                    self._sent_today.add(key)
+                    logger.info(f"[Timer] 触发 {task.get('time')}")
+                    # 用 create_task 异步执行，不阻塞锁
+                    asyncio.create_task(self._execute_task(task))
+
+            # 每天零点清理一次已发送记录
+            if now == "00:00":
+                self._sent_today.clear()
 
             await asyncio.sleep(1)
 
