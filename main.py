@@ -1,6 +1,5 @@
 import asyncio
 import time
-import os
 import aiohttp
 from astrbot.api.star import Context, Star, register
 from astrbot.api.message_components import Plain, At
@@ -10,20 +9,11 @@ class _MessageWrapper:
     def __init__(self, chain):
         self.chain = chain
 
-@register("satrfate_timer", "Satrfate", "极简定时问候插件", "1.6.4")
+@register("satrfate_timer", "Satrfate", "极简定时问候插件", "1.7.1")
 class TimerPlugin(Star):
     def __init__(self, context: Context, config: dict = None):
         super().__init__(context)
-        
-        # 设置时区为北京时间
-        os.environ['TZ'] = 'Asia/Shanghai'
-        try:
-            time.tzset()
-        except AttributeError:
-            pass  # Windows 不支持 tzset
-        
         self.config = config or {}
-        self.debug = self.config.get("debug", False)
         self.tasks = self.config.get("tasks", [])
         self.use_llm = self.config.get("use_llm", False)
         self.api_base = self.config.get("api_base", "https://api.deepseek.com/v1")
@@ -33,15 +23,12 @@ class TimerPlugin(Star):
         self._sent_today = set()
 
         logger.info(f"[Timer] 已加载 {len(self.tasks)} 个任务")
-        logger.info(f"[Timer] LLM: {'开' if self.use_llm else '关'} | 时区: Asia/Shanghai")
         for i, t in enumerate(self.tasks):
             logger.info(f"[Timer] 任务{i+1}: {t.get('time')} -> {t.get('umo','')[:30]}...")
 
         asyncio.create_task(self._loop())
 
     async def _loop(self):
-        logger.debug("[Timer] 循环已启动")
-
         while True:
             now = time.strftime("%H:%M")
             today = time.strftime("%Y-%m-%d")
@@ -52,7 +39,6 @@ class TimerPlugin(Star):
 
                 key = f"{i}-{today}"
                 if key in self._sent_today:
-                    logger.debug(f"[Timer] 任务{i+1} 今日已发送，跳过")
                     continue
 
                 self._sent_today.add(key)
@@ -85,7 +71,7 @@ class TimerPlugin(Star):
             chain.append(Plain(text))
             wrapper = _MessageWrapper(chain)
             await self.context.send_message(umo, wrapper)
-            logger.info(f"[Timer] 发送成功{' (@全体)' if at_all else ''}: {text[:50]}...")
+            logger.info(f"[Timer] 发送成功: {text[:50]}...")
         except Exception as e:
             logger.error(f"[Timer] 发送失败: {e}")
 
@@ -114,4 +100,4 @@ class TimerPlugin(Star):
         return ""
 
     async def terminate(self):
-        logger.debug("[Timer] 已卸载")
+        pass
