@@ -24,9 +24,9 @@
     "description": "模型名称（如 deepseek-v4-flash）",
     "default": "deepseek-v4-flash"
   },
-  "persona": {
-    "type": "string",
-    "description": "人格设定名称（对应AstrBot中的人格名，留空则使用全局默认人格）",
+  "system_prompt": {
+    "type": "text",
+    "description": "LLM 系统提示词（人格设定），开启LLM模式时必填",
     "default": ""
   },
   "tasks": {
