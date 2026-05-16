@@ -6,10 +6,11 @@ from astrbot.api.message_components import Plain
 from astrbot.api import logger
 
 class _MessageWrapper:
+    """包装消息链，解决 send_message 兼容性问题"""
     def __init__(self, chain):
         self.chain = chain
 
-@register("satrfate_timer", "Satrfate", "极简定时问候插件", "1.5.1")
+@register("satrfate_timer", "Satrfate", "极简定时问候插件", "1.6.0")
 class TimerPlugin(Star):
     def __init__(self, context: Context, config: dict = None):
         super().__init__(context)
@@ -23,6 +24,7 @@ class TimerPlugin(Star):
         self.system_prompt = self.config.get("system_prompt", "")
         self.use_network_time = self.config.get("use_network_time", True)
         self._sent_today = set()
+        self._last_triggered_time = None
 
         logger.info(f"[Timer] 已加载 {len(self.tasks)} 个任务")
         logger.info(f"[Timer] LLM: {'开' if self.use_llm else '关'} | 网络校准: {'开' if self.use_network_time else '关'}")
@@ -32,7 +34,6 @@ class TimerPlugin(Star):
         asyncio.create_task(self._loop())
 
     def _log(self, msg, level="info"):
-        """统一日志：debug信息仅在debug=True时输出，重要信息始终输出"""
         if self.debug or level != "debug":
             getattr(logger, level)(f"[Timer] {msg}")
 
@@ -50,7 +51,9 @@ class TimerPlugin(Star):
                     self._log(f"网络校准: {cache_now}", "debug")
                 else:
                     cache_now = time.strftime("%H:%M")
-                    logger.warning("[Timer] 网络校准失败，使用系统时间")
+                    if not hasattr(self, '_net_warned'):
+                        self._net_warned = True
+                        logger.warning("[Timer] 网络校准失败，使用系统时间")
 
             if not self.use_network_time:
                 cache_now = time.strftime("%H:%M")
@@ -58,14 +61,21 @@ class TimerPlugin(Star):
             today = time.strftime("%Y-%m-%d")
 
             for i, task in enumerate(self.tasks):
-                if cache_now != task.get("time", ""):
+                task_time = task.get("time", "")
+                if cache_now != task_time:
                     continue
+
+                if self._last_triggered_time == cache_now:
+                    continue
+
                 key = f"{i}-{today}"
                 if key in self._sent_today:
                     self._log(f"任务{i+1} 今日已发送，跳过", "debug")
                     continue
+
                 self._sent_today.add(key)
-                logger.info(f"[Timer] 触发 {task.get('time')}")
+                self._last_triggered_time = cache_now
+                logger.info(f"[Timer] 触发 {task_time}")
                 await self._execute_task(task)
 
             await asyncio.sleep(1)
@@ -84,24 +94,29 @@ class TimerPlugin(Star):
     async def _execute_task(self, task):
         umo = task.get("umo", "")
         prompt = task.get("prompt", "你好~")
+        at_all = task.get("at_all", False)
+        
         if not umo:
             return
 
+        # 生成最终文本
         text = prompt
         if self.use_llm:
-            self._log("调用LLM生成...", "debug")
             gen = await self._generate_text(prompt)
             if gen:
                 text = gen
-                self._log(f"LLM生成: {text[:50]}...", "debug")
             else:
                 logger.error("[Timer] LLM生成失败")
                 return
 
+        # 构造消息链：如果需要@全体，在前面加上 @全体成员 的CQ码和空格
+        if at_all:
+            text = "[CQ:at,qq=all] " + text
+
         try:
             wrapper = _MessageWrapper([Plain(text)])
             await self.context.send_message(umo, wrapper)
-            logger.info(f"[Timer] 发送成功: {text[:50]}...")
+            logger.info(f"[Timer] 发送成功{' (@全体)' if at_all else ''}: {text[:50]}...")
         except Exception as e:
             logger.error(f"[Timer] 发送失败: {e}")
 
@@ -117,7 +132,7 @@ class TimerPlugin(Star):
                     {"role": "system", "content": self.system_prompt or "请用中文回复。"},
                     {"role": "user", "content": prompt}
                 ],
-                "max_tokens": 500,
+                "max_tokens": 1024,
                 "temperature": 0.8
             }
             async with aiohttp.ClientSession() as s:
