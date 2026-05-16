@@ -2,6 +2,7 @@ import asyncio
 import time
 from astrbot.api.star import Context, Star, register
 from astrbot.api import logger
+from astrbot.api.message_components import Plain
 
 @register("satrfate_timer", "Satrfate", "极简定时问候插件", "1.0.6")
 class TimerPlugin(Star):
@@ -25,7 +26,6 @@ class TimerPlugin(Star):
         cache_now = time.strftime("%H:%M")
 
         while True:
-            # 每30秒同步一次网络时间
             if self.use_network_time and time.time() - last_sync > 30:
                 net_time = await self._get_network_time()
                 if net_time:
@@ -40,7 +40,6 @@ class TimerPlugin(Star):
 
             today = time.strftime("%Y-%m-%d")
 
-            # 处理定时任务
             for i, task in enumerate(self.tasks):
                 task_time = task.get("time", "")
                 if cache_now == task_time:
@@ -75,8 +74,11 @@ class TimerPlugin(Star):
                 logger.error("[Timer] 任务缺少 UMO，已跳过")
                 return
 
+            # 构建 MessageChain（符合官方文档规范）
+            chain = [Plain(prompt)]
+
             logger.info(f"[Timer] 正在发送消息到 {umo}: {prompt[:50]}...")
-            await self.context.send_message(umo, prompt)
+            await self.context.send_message(umo, chain)
             logger.info(f"[Timer] 消息发送成功")
         except Exception as e:
             logger.error(f"[Timer] 发送消息失败: {e}")
