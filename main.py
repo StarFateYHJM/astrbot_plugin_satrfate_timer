@@ -1,6 +1,7 @@
 import asyncio
 import time
 import aiohttp
+from datetime import datetime, timedelta
 from astrbot.api.star import Context, Star, register
 from astrbot.api.message_components import Plain, At
 from astrbot.api import logger
@@ -9,7 +10,7 @@ class _MessageWrapper:
     def __init__(self, chain):
         self.chain = chain
 
-@register("satrfate_timer", "YHJM", "极简定时问候插件", "1.7.2")
+@register("satrfate_timer", "YHJM", "极简定时问候插件", "2.0.0")
 class TimerPlugin(Star):
     def __init__(self, context: Context, config: dict = None):
         super().__init__(context)
@@ -20,45 +21,44 @@ class TimerPlugin(Star):
         self.api_key = self.config.get("api_key", "")
         self.model = self.config.get("model", "deepseek-v4-flash")
         self.system_prompt = self.config.get("system_prompt", "")
-        self._sent_today = set()
-        self._lock = asyncio.Lock()
 
         logger.info(f"[Timer] 已加载 {len(self.tasks)} 个任务")
         for i, t in enumerate(self.tasks):
             logger.info(f"[Timer] 任务{i+1}: {t.get('time')} -> {t.get('umo','')[:30]}...")
 
-        asyncio.create_task(self._loop())
+        for i, task in enumerate(self.tasks):
+            asyncio.create_task(self._run_task(i, task))
 
-    async def _loop(self):
+    async def _run_task(self, idx, task):
+        time_str = task.get("time", "")
+        if not time_str:
+            return
+
+        try:
+            h, m = map(int, time_str.split(":"))
+        except ValueError:
+            logger.error(f"[Timer] 任务{idx} 时间格式错误: {time_str}")
+            return
+
         while True:
-            now = time.strftime("%H:%M")
-            today = time.strftime("%Y-%m-%d")
+            now = datetime.now()
+            target = now.replace(hour=h, minute=m, second=0, microsecond=0)
 
-            async with self._lock:
-                for i, task in enumerate(self.tasks):
-                    if now != task.get("time", ""):
-                        continue
+            if target <= now:
+                target += timedelta(days=1)
 
-                    key = f"{i}-{today}"
-                    if key in self._sent_today:
-                        continue
+            wait_seconds = (target - now).total_seconds()
+            logger.info(f"[Timer] 任务{idx} 下次触发: {target.strftime('%Y-%m-%d %H:%M:%S')} (等待 {wait_seconds:.0f} 秒)")
+            await asyncio.sleep(wait_seconds)
 
-                    self._sent_today.add(key)
-                    logger.info(f"[Timer] 触发 {task.get('time')}")
-                    # 用 create_task 异步执行，不阻塞锁
-                    asyncio.create_task(self._execute_task(task))
-
-            # 每天零点清理一次已发送记录
-            if now == "00:00":
-                self._sent_today.clear()
-
-            await asyncio.sleep(1)
+            logger.info(f"[Timer] 触发 任务{idx} {time_str}")
+            await self._execute_task(task)
 
     async def _execute_task(self, task):
         umo = task.get("umo", "")
         prompt = task.get("prompt", "你好~")
         at_all = task.get("at_all", False)
-        
+
         if not umo:
             return
 
