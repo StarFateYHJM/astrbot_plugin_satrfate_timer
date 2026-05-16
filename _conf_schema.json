@@ -21,8 +21,18 @@
   },
   "model": {
     "type": "string",
-    "description": "模型名称（如 deepseek-chat, gpt-4o-mini）",
-    "default": "deepseek-chat"
+    "description": "模型名称（如 deepseek-v4-flash）",
+    "default": "deepseek-v4-flash"
+  },
+  "persona": {
+    "type": "string",
+    "description": "人格设定名称（对应AstrBot中的人格名，留空则使用全局默认人格）",
+    "default": ""
+  },
+  "knowledge_base": {
+    "type": "string",
+    "description": "知识库名称（留空则不使用知识库）",
+    "default": ""
   },
   "tasks": {
     "type": "template_list",
@@ -38,7 +48,7 @@
           },
           "umo": {
             "type": "string",
-            "description": "目标会话UMO",
+            "description": "目标会话UMO（如 FriendMessage:QQ号 或 GroupMessage:群号）",
             "default": ""
           },
           "prompt": {
