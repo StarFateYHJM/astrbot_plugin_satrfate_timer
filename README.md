@@ -1,0 +1,2 @@
+# astrbot_plugin_satrfate_timer
+极简定时问候插件，支持多任务配置和一次性测试指令
