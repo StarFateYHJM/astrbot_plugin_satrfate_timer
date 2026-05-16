@@ -8,7 +8,7 @@ class _MessageWrapper:
     def __init__(self, chain):
         self.chain = chain
 
-@register("satrfate_timer", "Satrfate", "极简定时问候插件", "1.1.5")
+@register("satrfate_timer", "Satrfate", "极简定时问候插件", "1.2.0")
 class TimerPlugin(Star):
     def __init__(self, context: Context, config: dict = None):
         super().__init__(context)
@@ -18,13 +18,14 @@ class TimerPlugin(Star):
         self.use_llm = self.config.get("use_llm", False)
         self.api_base = self.config.get("api_base", "https://api.deepseek.com/v1")
         self.api_key = self.config.get("api_key", "")
-        self.model = self.config.get("model", "deepseek-chat")
+        self.model = self.config.get("model", "deepseek-v4-flash")
+        self.persona_name = self.config.get("persona", "")
         self._sent_today = {}
 
         logger.info(f"[Timer] 插件已加载，读取到 {len(self.tasks)} 个定时任务")
         logger.info(f"[Timer] LLM模式: {'开启' if self.use_llm else '关闭'}")
         if self.use_llm:
-            logger.info(f"[Timer] API: {self.api_base}, Model: {self.model}")
+            logger.info(f"[Timer] API: {self.api_base}, Model: {self.model}, Persona: {self.persona_name or '默认'}")
         for i, task in enumerate(self.tasks):
             logger.info(f"[Timer] 任务{i+1}: time={task.get('time')}, umo={task.get('umo')}, prompt={task.get('prompt', '')[:30]}...")
 
@@ -98,13 +99,22 @@ class TimerPlugin(Star):
             logger.error(f"[Timer] 发送消息失败: {e}")
 
     async def _generate_text(self, prompt: str) -> str:
-        """调用通用 LLM API 生成文本"""
         try:
             import aiohttp
 
             if not self.api_key:
                 logger.error("[Timer] 缺少 api_key")
                 return ""
+
+            # 获取人格设定
+            system_prompt = ""
+            if self.persona_name:
+                persona_content = await self._get_persona_content(self.persona_name)
+                if persona_content:
+                    system_prompt = persona_content
+
+            if not system_prompt:
+                system_prompt = "请用中文回复，语气自然亲切。"
 
             headers = {
                 "Authorization": f"Bearer {self.api_key}",
@@ -113,6 +123,7 @@ class TimerPlugin(Star):
             payload = {
                 "model": self.model,
                 "messages": [
+                    {"role": "system", "content": system_prompt},
                     {"role": "user", "content": prompt}
                 ],
                 "max_tokens": 500,
@@ -128,13 +139,25 @@ class TimerPlugin(Star):
                 ) as resp:
                     if resp.status == 200:
                         data = await resp.json()
-                        content = data["choices"][0]["message"]["content"]
-                        return content.strip()
+                        return data["choices"][0]["message"]["content"].strip()
                     else:
                         logger.error(f"[Timer] API请求失败: {resp.status}")
                         return ""
         except Exception as e:
             logger.error(f"[Timer] LLM生成失败: {e}")
+            return ""
+
+    async def _get_persona_content(self, persona_name: str) -> str:
+        try:
+            persona_mgr = self.context.persona_manager
+            if not persona_mgr:
+                return ""
+            persona = persona_mgr.get_persona(persona_name)
+            if persona and hasattr(persona, 'system_prompt'):
+                return persona.system_prompt
+            return ""
+        except Exception as e:
+            logger.error(f"[Timer] 获取人格设定失败: {e}")
             return ""
 
     async def terminate(self):
