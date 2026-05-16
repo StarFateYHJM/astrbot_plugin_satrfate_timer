@@ -2,15 +2,14 @@ import asyncio
 import time
 import aiohttp
 from astrbot.api.star import Context, Star, register
-from astrbot.api.message_components import Plain
+from astrbot.api.message_components import Plain, At
 from astrbot.api import logger
 
 class _MessageWrapper:
-    """包装消息链，解决 send_message 兼容性问题"""
     def __init__(self, chain):
         self.chain = chain
 
-@register("satrfate_timer", "Satrfate", "极简定时问候插件", "1.6.0")
+@register("satrfate_timer", "Satrfate", "极简定时问候插件", "1.6.1")
 class TimerPlugin(Star):
     def __init__(self, context: Context, config: dict = None):
         super().__init__(context)
@@ -99,7 +98,6 @@ class TimerPlugin(Star):
         if not umo:
             return
 
-        # 生成最终文本
         text = prompt
         if self.use_llm:
             gen = await self._generate_text(prompt)
@@ -109,12 +107,12 @@ class TimerPlugin(Star):
                 logger.error("[Timer] LLM生成失败")
                 return
 
-        # 构造消息链：如果需要@全体，在前面加上 @全体成员 的CQ码和空格
-        if at_all:
-            text = "[CQ:at,qq=all] " + text
-
         try:
-            wrapper = _MessageWrapper([Plain(text)])
+            chain = []
+            if at_all:
+                chain.append(At(qq="all"))
+            chain.append(Plain(text))
+            wrapper = _MessageWrapper(chain)
             await self.context.send_message(umo, wrapper)
             logger.info(f"[Timer] 发送成功{' (@全体)' if at_all else ''}: {text[:50]}...")
         except Exception as e:
