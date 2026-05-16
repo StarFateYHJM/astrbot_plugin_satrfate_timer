@@ -5,7 +5,7 @@ from astrbot.api.event import filter, AstrMessageEvent
 from astrbot.api.star import Context, Star, register
 from astrbot.api import logger
 
-@register("satrfate_timer", "Satrfate", "极简定时问候插件", "1.0.0")
+@register("satrfate_timer", "YHJM", "极简定时问候插件", "1.0.0")
 class TimerPlugin(Star):
     def __init__(self, context: Context, config: dict = None):
         super().__init__(context)
