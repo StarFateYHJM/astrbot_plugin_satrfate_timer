@@ -6,17 +6,22 @@
   },
   "use_network_time": {
     "type": "bool",
-    "description": "是否使用网络时间校准（开启后会定期从 timeapi.io 获取北京时间）",
+    "description": "是否使用网络时间校准",
     "default": true
+  },
+  "timezone": {
+    "type": "string",
+    "description": "时区（如 Asia/Shanghai）",
+    "default": "Asia/Shanghai"
   },
   "use_llm": {
     "type": "bool",
-    "description": "开启LLM模式：让AI根据提示词自动生成问候语；关闭则发送固定文本",
+    "description": "开启LLM模式",
     "default": false
   },
   "api_base": {
     "type": "string",
-    "description": "LLM API 地址（如 https://api.deepseek.com/v1）",
+    "description": "LLM API 地址",
     "default": "https://api.deepseek.com/v1"
   },
   "api_key": {
@@ -26,29 +31,29 @@
   },
   "model": {
     "type": "string",
-    "description": "模型名称（如 deepseek-v4-flash）",
+    "description": "模型名称",
     "default": "deepseek-v4-flash"
   },
   "system_prompt": {
     "type": "text",
-    "description": "LLM 系统提示词（人格设定），开启LLM模式时必填",
+    "description": "LLM 系统提示词（人格设定）",
     "default": ""
   },
   "tasks": {
     "type": "template_list",
-    "description": "定时任务列表，点击添加按钮创建新任务",
+    "description": "定时任务列表",
     "templates": {
       "default": {
         "name": "新任务",
         "items": {
           "time": {
             "type": "string",
-            "description": "触发时间（HH:MM格式，北京时间）",
+            "description": "触发时间（HH:MM格式）",
             "default": "08:00"
           },
           "umo": {
             "type": "string",
-            "description": "目标会话UMO（如 FriendMessage:QQ号 或 GroupMessage:群号）",
+            "description": "目标会话UMO",
             "default": ""
           },
           "prompt": {
