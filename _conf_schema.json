@@ -43,7 +43,8 @@
         "items": {
           "time": {"type": "string", "description": "触发时间(HH:MM)", "default": "08:00"},
           "umo": {"type": "string", "description": "目标UMO", "default": ""},
-          "prompt": {"type": "text", "description": "内容/提示词", "default": ""}
+          "prompt": {"type": "text", "description": "内容/提示词", "default": ""},
+          "at_all": {"type": "bool", "description": "@全体成员", "default": false}
         }
       }
     },
