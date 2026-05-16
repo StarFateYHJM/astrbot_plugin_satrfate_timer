@@ -29,11 +29,6 @@
     "description": "人格设定名称（对应AstrBot中的人格名，留空则使用全局默认人格）",
     "default": ""
   },
-  "knowledge_base": {
-    "type": "string",
-    "description": "知识库名称（留空则不使用知识库）",
-    "default": ""
-  },
   "tasks": {
     "type": "template_list",
     "description": "定时任务列表，点击添加按钮创建新任务",
