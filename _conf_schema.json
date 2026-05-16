@@ -2,6 +2,26 @@
   "tasks": {
     "type": "list",
     "default": [],
-    "description": "定时任务列表。每项包含：time（HH:MM格式）、prompt（发送内容）、target（目标会话UMO，格式：Bot名称:FriendMessage:QQ号 或 Bot名称:GroupMessage:QQ号_群号）"
+    "description": "定时任务列表",
+    "items": {
+      "type": "object",
+      "properties": {
+        "time": {
+          "type": "string",
+          "default": "08:00",
+          "description": "触发时间（HH:MM格式，24小时制）"
+        },
+        "umo": {
+          "type": "string",
+          "default": "",
+          "description": "目标会话UMO（如 FriendMessage:123456789 或 GroupMessage:987654321）"
+        },
+        "prompt": {
+          "type": "string",
+          "default": "你好~",
+          "description": "发送的消息内容"
+        }
+      }
+    }
   }
 }
