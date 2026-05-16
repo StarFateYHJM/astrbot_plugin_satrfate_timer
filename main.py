@@ -3,13 +3,12 @@ import time
 from astrbot.api.star import Context, Star, register
 from astrbot.api import logger
 from astrbot.api.message_components import Plain
-from astrbot.api.provider import ProviderRequest
 
 class _MessageWrapper:
     def __init__(self, chain):
         self.chain = chain
 
-@register("satrfate_timer", "Satrfate", "极简定时问候插件", "1.1.3")
+@register("satrfate_timer", "Satrfate", "极简定时问候插件", "1.1.5")
 class TimerPlugin(Star):
     def __init__(self, context: Context, config: dict = None):
         super().__init__(context)
@@ -17,10 +16,15 @@ class TimerPlugin(Star):
         self.tasks = self.config.get("tasks", [])
         self.use_network_time = self.config.get("use_network_time", True)
         self.use_llm = self.config.get("use_llm", False)
+        self.api_base = self.config.get("api_base", "https://api.deepseek.com/v1")
+        self.api_key = self.config.get("api_key", "")
+        self.model = self.config.get("model", "deepseek-chat")
         self._sent_today = {}
 
         logger.info(f"[Timer] 插件已加载，读取到 {len(self.tasks)} 个定时任务")
         logger.info(f"[Timer] LLM模式: {'开启' if self.use_llm else '关闭'}")
+        if self.use_llm:
+            logger.info(f"[Timer] API: {self.api_base}, Model: {self.model}")
         for i, task in enumerate(self.tasks):
             logger.info(f"[Timer] 任务{i+1}: time={task.get('time')}, umo={task.get('umo')}, prompt={task.get('prompt', '')[:30]}...")
 
@@ -94,14 +98,41 @@ class TimerPlugin(Star):
             logger.error(f"[Timer] 发送消息失败: {e}")
 
     async def _generate_text(self, prompt: str) -> str:
+        """调用通用 LLM API 生成文本"""
         try:
-            resp = await ProviderRequest.text_request(
-                context=self.context,
-                prompt=prompt,
-                system_prompt="",
-                contexts=[],
-            )
-            return resp.strip() if resp else ""
+            import aiohttp
+
+            if not self.api_key:
+                logger.error("[Timer] 缺少 api_key")
+                return ""
+
+            headers = {
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json"
+            }
+            payload = {
+                "model": self.model,
+                "messages": [
+                    {"role": "user", "content": prompt}
+                ],
+                "max_tokens": 500,
+                "temperature": 0.8
+            }
+
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    f"{self.api_base}/chat/completions",
+                    json=payload,
+                    headers=headers,
+                    timeout=aiohttp.ClientTimeout(total=30)
+                ) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        content = data["choices"][0]["message"]["content"]
+                        return content.strip()
+                    else:
+                        logger.error(f"[Timer] API请求失败: {resp.status}")
+                        return ""
         except Exception as e:
             logger.error(f"[Timer] LLM生成失败: {e}")
             return ""
