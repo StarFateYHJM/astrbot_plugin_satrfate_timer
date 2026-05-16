@@ -9,7 +9,7 @@ class _MessageWrapper:
     def __init__(self, chain):
         self.chain = chain
 
-@register("satrfate_timer", "Satrfate", "极简定时问候插件", "1.6.1")
+@register("satrfate_timer", "Satrfate", "极简定时问候插件", "1.6.3")
 class TimerPlugin(Star):
     def __init__(self, context: Context, config: dict = None):
         super().__init__(context)
@@ -32,22 +32,18 @@ class TimerPlugin(Star):
 
         asyncio.create_task(self._loop())
 
-    def _log(self, msg, level="info"):
-        if self.debug or level != "debug":
-            getattr(logger, level)(f"[Timer] {msg}")
-
     async def _loop(self):
-        self._log("循环已启动", "debug")
+        logger.debug("[Timer] 循环已启动")
         last_sync = 0
         cache_now = time.strftime("%H:%M")
 
         while True:
-            if self.use_network_time and time.time() - last_sync > 30:
+            if self.use_network_time and time.time() - last_sync > 120:
                 net = await self._get_network_time()
                 if net:
                     cache_now = net
                     last_sync = time.time()
-                    self._log(f"网络校准: {cache_now}", "debug")
+                    # 成功时静默
                 else:
                     cache_now = time.strftime("%H:%M")
                     if not hasattr(self, '_net_warned'):
@@ -69,7 +65,7 @@ class TimerPlugin(Star):
 
                 key = f"{i}-{today}"
                 if key in self._sent_today:
-                    self._log(f"任务{i+1} 今日已发送，跳过", "debug")
+                    logger.debug(f"[Timer] 任务{i+1} 今日已发送，跳过")
                     continue
 
                 self._sent_today.add(key)
@@ -143,4 +139,4 @@ class TimerPlugin(Star):
         return ""
 
     async def terminate(self):
-        self._log("已卸载", "debug")
+        logger.debug("[Timer] 已卸载")
