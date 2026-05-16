@@ -4,6 +4,11 @@
     "description": "是否使用网络时间校准（开启后会定期从 timeapi.io 获取北京时间）",
     "default": true
   },
+  "use_llm": {
+    "type": "bool",
+    "description": "开启LLM模式：让AI根据提示词自动生成问候语；关闭则发送固定文本",
+    "default": false
+  },
   "tasks": {
     "type": "template_list",
     "description": "定时任务列表，点击添加按钮创建新任务",
@@ -23,7 +28,7 @@
           },
           "prompt": {
             "type": "text",
-            "description": "发送内容",
+            "description": "发送内容或LLM提示词",
             "default": ""
           }
         }
