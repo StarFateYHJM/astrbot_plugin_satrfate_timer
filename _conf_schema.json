@@ -4,16 +4,6 @@
     "description": "开启调试日志",
     "default": false
   },
-  "use_network_time": {
-    "type": "bool",
-    "description": "是否使用网络时间校准",
-    "default": true
-  },
-  "timezone": {
-    "type": "string",
-    "description": "时区（如 Asia/Shanghai）",
-    "default": "Asia/Shanghai"
-  },
   "use_llm": {
     "type": "bool",
     "description": "开启LLM模式",
@@ -38,6 +28,16 @@
     "type": "text",
     "description": "LLM 系统提示词（人格设定）",
     "default": ""
+  },
+  "use_network_time": {
+    "type": "bool",
+    "description": "是否使用网络时间校准",
+    "default": true
+  },
+  "timezone": {
+    "type": "string",
+    "description": "时区（如 Asia/Shanghai）",
+    "default": "Asia/Shanghai"
   },
   "tasks": {
     "type": "template_list",
