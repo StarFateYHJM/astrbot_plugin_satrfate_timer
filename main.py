@@ -9,27 +9,23 @@ class _MessageWrapper:
     def __init__(self, chain):
         self.chain = chain
 
-@register("satrfate_timer", "Satrfate", "极简定时问候插件", "1.2.5")
+@register("satrfate_timer", "Satrfate", "极简定时问候插件", "1.2.6")
 class TimerPlugin(Star):
     def __init__(self, context: Context, config: dict = None):
         super().__init__(context)
         self.config = config or {}
         self.debug = self.config.get("debug", False)
         self.tasks = self.config.get("tasks", [])
-        self.use_network_time = self.config.get("use_network_time", True)
-        self.timezone = self.config.get("timezone", "Asia/Shanghai")
         self.use_llm = self.config.get("use_llm", False)
         self.api_base = self.config.get("api_base", "https://api.deepseek.com/v1")
         self.api_key = self.config.get("api_key", "")
         self.model = self.config.get("model", "deepseek-v4-flash")
         self.system_prompt = self.config.get("system_prompt", "")
-        self._sent_today = {}
-        self._last_sent = {}
+        self._sent_today = set()
 
-        # 插件启动信息始终输出
+        # 启动信息始终输出
         logger.info(f"[Timer] 插件已加载，读取到 {len(self.tasks)} 个定时任务")
         logger.info(f"[Timer] LLM模式: {'开启' if self.use_llm else '关闭'}")
-        logger.info(f"[Timer] 网络时间校准: {'开启' if self.use_network_time else '关闭'}, 时区: {self.timezone}")
         if self.use_llm:
             logger.info(f"[Timer] API: {self.api_base}, Model: {self.model}")
         for i, task in enumerate(self.tasks):
@@ -37,62 +33,31 @@ class TimerPlugin(Star):
 
         asyncio.create_task(self._loop())
 
-    # ========== 统一的日志方法（参考入群欢迎插件） ==========
+    # ========== 统一日志方法（参考入群欢迎插件） ==========
     def _log(self, msg: str, level: str = "info"):
-        """根据 debug 开关输出日志，debug 日志仅在开启时输出"""
         if self.debug or level != "debug":
             getattr(logger, level)(f"[Timer] {msg}")
 
     async def _loop(self):
         self._log("定时任务循环已启动", "info")
-        last_sync = 0
-        cache_now = time.strftime("%H:%M")
-
         while True:
-            # 网络时间校准
-            if self.use_network_time and time.time() - last_sync > 30:
-                net_time = await self._get_network_time()
-                if net_time:
-                    cache_now = net_time
-                    last_sync = time.time()
-                    self._log(f"网络时间校准成功: {cache_now}", "debug")
-                else:
-                    cache_now = time.strftime("%H:%M")
-                    self._log("网络时间获取失败，降级使用系统时间", "warning")
-            if not self.use_network_time:
-                cache_now = time.strftime("%H:%M")
-
+            now = time.strftime("%H:%M")
             today = time.strftime("%Y-%m-%d")
 
-            # 检查每个任务
             for i, task in enumerate(self.tasks):
-                task_time = task.get("time", "")
-                if cache_now == task_time:
-                    task_key = f"{task.get('time')}-{task.get('umo')}-{today}"
-                    now_ts = time.time()
-                    # 60秒冷却 + 当天不重复
-                    if task_key in self._sent_today or (task_key in self._last_sent and now_ts - self._last_sent[task_key] < 60):
-                        self._log(f"任务 {task_time} 已在冷却期或今日已发送，跳过", "debug")
-                        continue
-                    self._sent_today[task_key] = True
-                    self._last_sent[task_key] = now_ts
-                    self._log(f"触发定时任务: {task_time}", "info")
-                    await self._execute_task(task)
+                if now != task.get("time", ""):
+                    continue
+
+                task_key = f"{i}-{today}"
+                if task_key in self._sent_today:
+                    self._log(f"任务{i+1} 今日已发送，跳过", "debug")
+                    continue
+
+                self._sent_today.add(task_key)
+                self._log(f"触发定时任务{i+1}: {now}", "info")
+                await self._execute_task(task)
 
             await asyncio.sleep(1)
-
-    async def _get_network_time(self):
-        try:
-            import aiohttp
-            url = f"https://timeapi.io/api/Time/current/zone?timeZone={self.timezone}"
-            async with aiohttp.ClientSession() as session:
-                async with session.get(url, timeout=5) as resp:
-                    if resp.status == 200:
-                        data = await resp.json()
-                        return f"{int(data['hour']):02d}:{int(data['minute']):02d}"
-        except Exception as e:
-            self._log(f"获取网络时间失败: {e}", "debug")
-        return None
 
     async def _execute_task(self, task: dict):
         umo = task.get("umo", "")
