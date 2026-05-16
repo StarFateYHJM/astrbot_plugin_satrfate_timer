@@ -2,7 +2,7 @@ import asyncio
 import time
 from astrbot.api.star import Context, Star, register
 from astrbot.api import logger
-from astrbot.api.message_components import Plain
+from astrbot.api.message_components import Plain, MessageChain
 
 @register("satrfate_timer", "Satrfate", "极简定时问候插件", "1.0.6")
 class TimerPlugin(Star):
@@ -74,8 +74,7 @@ class TimerPlugin(Star):
                 logger.error("[Timer] 任务缺少 UMO，已跳过")
                 return
 
-            # 构建 MessageChain（符合官方文档规范）
-            chain = [Plain(prompt)]
+            chain = MessageChain([Plain(prompt)])
 
             logger.info(f"[Timer] 正在发送消息到 {umo}: {prompt[:50]}...")
             await self.context.send_message(umo, chain)
