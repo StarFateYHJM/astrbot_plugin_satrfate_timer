@@ -1,5 +1,6 @@
 import asyncio
 import time
+import os
 import aiohttp
 from astrbot.api.star import Context, Star, register
 from astrbot.api.message_components import Plain, At
@@ -9,10 +10,18 @@ class _MessageWrapper:
     def __init__(self, chain):
         self.chain = chain
 
-@register("satrfate_timer", "Satrfate", "极简定时问候插件", "1.6.3")
+@register("satrfate_timer", "Satrfate", "极简定时问候插件", "1.6.4")
 class TimerPlugin(Star):
     def __init__(self, context: Context, config: dict = None):
         super().__init__(context)
+        
+        # 设置时区为北京时间
+        os.environ['TZ'] = 'Asia/Shanghai'
+        try:
+            time.tzset()
+        except AttributeError:
+            pass  # Windows 不支持 tzset
+        
         self.config = config or {}
         self.debug = self.config.get("debug", False)
         self.tasks = self.config.get("tasks", [])
@@ -21,12 +30,10 @@ class TimerPlugin(Star):
         self.api_key = self.config.get("api_key", "")
         self.model = self.config.get("model", "deepseek-v4-flash")
         self.system_prompt = self.config.get("system_prompt", "")
-        self.use_network_time = self.config.get("use_network_time", True)
         self._sent_today = set()
-        self._last_triggered_time = None
 
         logger.info(f"[Timer] 已加载 {len(self.tasks)} 个任务")
-        logger.info(f"[Timer] LLM: {'开' if self.use_llm else '关'} | 网络校准: {'开' if self.use_network_time else '关'}")
+        logger.info(f"[Timer] LLM: {'开' if self.use_llm else '关'} | 时区: Asia/Shanghai")
         for i, t in enumerate(self.tasks):
             logger.info(f"[Timer] 任务{i+1}: {t.get('time')} -> {t.get('umo','')[:30]}...")
 
@@ -34,33 +41,13 @@ class TimerPlugin(Star):
 
     async def _loop(self):
         logger.debug("[Timer] 循环已启动")
-        last_sync = 0
-        cache_now = time.strftime("%H:%M")
 
         while True:
-            if self.use_network_time and time.time() - last_sync > 120:
-                net = await self._get_network_time()
-                if net:
-                    cache_now = net
-                    last_sync = time.time()
-                    # 成功时静默
-                else:
-                    cache_now = time.strftime("%H:%M")
-                    if not hasattr(self, '_net_warned'):
-                        self._net_warned = True
-                        logger.warning("[Timer] 网络校准失败，使用系统时间")
-
-            if not self.use_network_time:
-                cache_now = time.strftime("%H:%M")
-
+            now = time.strftime("%H:%M")
             today = time.strftime("%Y-%m-%d")
 
             for i, task in enumerate(self.tasks):
-                task_time = task.get("time", "")
-                if cache_now != task_time:
-                    continue
-
-                if self._last_triggered_time == cache_now:
+                if now != task.get("time", ""):
                     continue
 
                 key = f"{i}-{today}"
@@ -69,22 +56,10 @@ class TimerPlugin(Star):
                     continue
 
                 self._sent_today.add(key)
-                self._last_triggered_time = cache_now
-                logger.info(f"[Timer] 触发 {task_time}")
+                logger.info(f"[Timer] 触发 {task.get('time')}")
                 await self._execute_task(task)
 
             await asyncio.sleep(1)
-
-    async def _get_network_time(self):
-        try:
-            async with aiohttp.ClientSession() as s:
-                async with s.get("https://timeapi.io/api/Time/current/zone?timeZone=Asia/Shanghai", timeout=5) as r:
-                    if r.status == 200:
-                        d = await r.json()
-                        return f"{int(d['hour']):02d}:{int(d['minute']):02d}"
-        except Exception:
-            pass
-        return None
 
     async def _execute_task(self, task):
         umo = task.get("umo", "")
