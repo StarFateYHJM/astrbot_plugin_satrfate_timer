@@ -10,10 +10,25 @@ class _MessageWrapper:
     def __init__(self, chain):
         self.chain = chain
 
-@register("satrfate_timer", "YHJM", "极简定时问候插件", "2.0.0")
+@register("satrfate_timer", "YHJM", "极简定时问候插件", "2.1.0")
 class TimerPlugin(Star):
+    _instance = None          # 类级别单例
+    _running_tasks = []       # 记录所有定时协程
+
     def __init__(self, context: Context, config: dict = None):
         super().__init__(context)
+
+        # 如果已有旧实例在运行，先清理干净
+        if TimerPlugin._instance is not None:
+            logger.warning("[Timer] 检测到旧实例，正在清理...")
+            try:
+                TimerPlugin._instance.terminate()
+            except Exception as e:
+                logger.error(f"[Timer] 清理旧实例失败: {e}")
+
+        # 注册为新实例
+        TimerPlugin._instance = self
+
         self.config = config or {}
         self.tasks = self.config.get("tasks", [])
         self.use_llm = self.config.get("use_llm", False)
@@ -22,12 +37,15 @@ class TimerPlugin(Star):
         self.model = self.config.get("model", "deepseek-v4-flash")
         self.system_prompt = self.config.get("system_prompt", "")
 
-        logger.info(f"[Timer] 已加载 {len(self.tasks)} 个任务")
+        logger.info(f"[Timer] 已加载 {len(self.tasks)} 个任务 (实例 id={id(self)})")
         for i, t in enumerate(self.tasks):
             logger.info(f"[Timer] 任务{i+1}: {t.get('time')} -> {t.get('umo','')[:30]}...")
 
+        # 启动定时任务，并保存 task 引用，方便后续取消
+        self._my_tasks = []
         for i, task in enumerate(self.tasks):
-            asyncio.create_task(self._run_task(i, task))
+            t = asyncio.create_task(self._run_task(i, task))
+            self._my_tasks.append(t)
 
     async def _run_task(self, idx, task):
         time_str = task.get("time", "")
@@ -49,7 +67,12 @@ class TimerPlugin(Star):
 
             wait_seconds = (target - now).total_seconds()
             logger.info(f"[Timer] 任务{idx} 下次触发: {target.strftime('%Y-%m-%d %H:%M:%S')} (等待 {wait_seconds:.0f} 秒)")
-            await asyncio.sleep(wait_seconds)
+
+            try:
+                await asyncio.sleep(wait_seconds)
+            except asyncio.CancelledError:
+                logger.info(f"[Timer] 任务{idx} 被取消")
+                break
 
             logger.info(f"[Timer] 触发 任务{idx} {time_str}")
             await self._execute_task(task)
@@ -107,4 +130,11 @@ class TimerPlugin(Star):
         return ""
 
     async def terminate(self):
-        pass
+        """终止所有定时任务"""
+        logger.info("[Timer] 正在终止所有定时任务...")
+        for t in getattr(self, '_my_tasks', []):
+            t.cancel()
+        # 等待任务真正结束
+        if self._my_tasks:
+            await asyncio.gather(*self._my_tasks, return_exceptions=True)
+        logger.info("[Timer] 所有定时任务已终止")
